@@ -1,18 +1,21 @@
-// mc-protocol: Minecraft protocol implementation for Almide.
+// mc-protocol: Vanilla Minecraft protocol implementation for Almide.
 //
 // Modules:
 //   varint     - VarInt encoding/decoding
 //   types      - Minecraft data types (string, short, int, long)
 //   packet     - Packet framing (build/read, compression)
 //   connection - TCP connection with encryption and compression
-//   neoforge   - NeoForge-specific payload encoding
 //   aes        - AES-128-CFB8 (vendored from almide/aes)
+//
+// For modded server support, see:
+//   almd-mc/neoforge  - NeoForge 1.21.1+
+//   almd-mc/forge     - Forge (planned)
+//   almd-mc/fabric    - Fabric (planned)
 
 import self.varint
 import self.types
 import self.packet
 import self.connection
-import self.neoforge
 
 // Protocol version for Minecraft 1.21.1
 let PROTOCOL_VERSION = 767
