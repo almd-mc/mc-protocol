@@ -2,6 +2,104 @@ import bytes
 import self.varint
 
 // Minecraft protocol data types.
+// Reference: https://minecraft.wiki/w/Java_Edition_protocol/Data_types
+// All multi-byte numeric types are big-endian (network byte order).
+
+// --- Boolean ---
+
+fn encode_bool(v: Bool) -> Bytes =
+  bytes.from_list([if v then 0x01 else 0x00])
+
+fn decode_bool(buf: Bytes, offset: Int) -> Bool =
+  bytes.read_u8(buf, offset) != 0
+
+// --- Byte ---
+
+fn encode_byte(v: Int) -> Bytes =
+  bytes.from_list([int.band(v, 0xFF)])
+
+fn decode_byte(buf: Bytes, offset: Int) -> Int =
+  bytes.read_u8(buf, offset)
+
+// --- Short (signed 16-bit, big-endian) ---
+
+fn encode_short(v: Int) -> Bytes =
+  bytes.from_list([int.band(int.bshr(v, 8), 0xFF), int.band(v, 0xFF)])
+
+fn decode_short(buf: Bytes, offset: Int) -> Int = {
+  let raw = int.bor(int.bshl(bytes.read_u8(buf, offset), 8), bytes.read_u8(buf, offset + 1))
+  if raw >= 32768 then raw - 65536 else raw
+}
+
+// --- Unsigned Short (16-bit, big-endian) ---
+
+fn encode_unsigned_short(v: Int) -> Bytes =
+  bytes.from_list([int.band(int.bshr(v, 8), 0xFF), int.band(v, 0xFF)])
+
+fn decode_unsigned_short(buf: Bytes, offset: Int) -> Int =
+  int.bor(int.bshl(bytes.read_u8(buf, offset), 8), bytes.read_u8(buf, offset + 1))
+
+// --- Int (signed 32-bit, big-endian) ---
+
+fn encode_int(v: Int) -> Bytes = {
+  var buf = bytes.new(4)
+  for i in 0..4 {
+    buf = bytes.set(buf, 3 - i, int.band(int.bshr(v, i * 8), 0xFF))
+  }
+  buf
+}
+
+fn decode_int(buf: Bytes, offset: Int) -> Int = {
+  let raw = int.bor(
+    int.bor(int.bshl(bytes.read_u8(buf, offset), 24), int.bshl(bytes.read_u8(buf, offset + 1), 16)),
+    int.bor(int.bshl(bytes.read_u8(buf, offset + 2), 8), bytes.read_u8(buf, offset + 3))
+  )
+  // Sign extend from 32 bits
+  if int.band(raw, 0x80000000) != 0 then int.bor(raw, -4294967296) else raw
+}
+
+// --- Long (signed 64-bit, big-endian) ---
+
+fn encode_long(v: Int) -> Bytes = {
+  var buf = bytes.new(8)
+  for i in 0..8 {
+    buf = bytes.set(buf, 7 - i, int.band(int.bshr(v, i * 8), 0xFF))
+  }
+  buf
+}
+
+fn decode_long(buf: Bytes, offset: Int) -> Int = {
+  var val = 0
+  for i in 0..8 {
+    val = int.bor(int.bshl(val, 8), bytes.read_u8(buf, offset + i))
+  }
+  val
+}
+
+// --- Float (32-bit IEEE 754, big-endian) ---
+
+fn encode_float(v: Float) -> Bytes = {
+  var buf = bytes.new(4)
+  bytes.set_f32_be(buf, 0, v)
+  buf
+}
+
+fn decode_float(buf: Bytes, offset: Int) -> Float =
+  bytes.read_f32_be(buf, offset)
+
+// --- Double (64-bit IEEE 754, big-endian) ---
+
+fn encode_double(v: Float) -> Bytes = {
+  var buf = bytes.new(8)
+  bytes.set_f64_be(buf, 0, v)
+  buf
+}
+
+fn decode_double(buf: Bytes, offset: Int) -> Float =
+  bytes.read_f64_be(buf, offset)
+
+// --- String (VarInt length + UTF-8) ---
+// Max length: 32767 bytes (encoded), max chars depends on context.
 
 fn encode_string(s: String) -> Bytes = {
   let str_bytes = bytes.from_string(s)
@@ -14,52 +112,159 @@ fn decode_string(buf: Bytes, offset: Int) -> { value: String, size: Int } = {
   { value: bytes.to_string(str_bytes) ?? "", size: len_r.size + len_r.value }
 }
 
-fn encode_unsigned_short(v: Int) -> Bytes =
-  bytes.from_list([int.band(int.bshr(v, 8), 0xFF), int.band(v, 0xFF)])
+// --- Identifier (same wire format as String, namespace:path) ---
 
-fn encode_long(v: Int) -> Bytes = {
-  var buf = bytes.new(8)
-  for i in 0..8 {
-    buf = bytes.set(buf, 7 - i, int.band(int.bshr(v, i * 8), 0xFF))
+fn encode_identifier(s: String) -> Bytes = encode_string(s)
+
+fn decode_identifier(buf: Bytes, offset: Int) -> { value: String, size: Int } =
+  decode_string(buf, offset)
+
+// --- UUID (128 bits = 2x unsigned 64-bit, big-endian) ---
+
+fn encode_uuid(uuid_hex: String) -> Bytes = {
+  // 32 hex chars (no dashes) → 16 bytes
+  let chars = string.chars(uuid_hex)
+  var buf = bytes.new(16)
+  for i in 0..16 {
+    let hi = hex_to_int(list.get(chars, i * 2) ?? "0")
+    let lo = hex_to_int(list.get(chars, i * 2 + 1) ?? "0")
+    buf = bytes.set(buf, i, hi * 16 + lo)
   }
   buf
 }
 
-fn encode_int(v: Int) -> Bytes = {
-  var buf = bytes.new(4)
-  for i in 0..4 {
-    buf = bytes.set(buf, 3 - i, int.band(int.bshr(v, i * 8), 0xFF))
+fn decode_uuid(buf: Bytes, offset: Int) -> String = {
+  var hex = ""
+  for i in 0..16 {
+    let b = bytes.read_u8(buf, offset + i)
+    let hi = int_to_hex(int.bshr(b, 4))
+    let lo = int_to_hex(int.band(b, 0x0F))
+    hex = "${hex}${hi}${lo}"
   }
-  buf
+  hex
 }
 
-fn decode_int(buf: Bytes, offset: Int) -> Int =
-  int.bor(
-    int.bor(int.bshl(bytes.read_u8(buf, offset), 24), int.bshl(bytes.read_u8(buf, offset + 1), 16)),
-    int.bor(int.bshl(bytes.read_u8(buf, offset + 2), 8), bytes.read_u8(buf, offset + 3))
+// --- Position (x:26 + z:26 + y:12 = 8 bytes) ---
+
+fn encode_position(x: Int, y: Int, z: Int) -> Bytes = {
+  let val = int.bor(
+    int.bor(int.bshl(int.band(x, 0x3FFFFFF), 38), int.bshl(int.band(z, 0x3FFFFFF), 12)),
+    int.band(y, 0xFFF)
   )
+  encode_long(val)
+}
 
-fn decode_long(buf: Bytes, offset: Int) -> Int = {
-  var val = 0
-  for i in 0..8 {
-    val = int.bor(int.bshl(val, 8), bytes.read_u8(buf, offset + i))
+fn decode_position(buf: Bytes, offset: Int) -> { x: Int, y: Int, z: Int } = {
+  let val = decode_long(buf, offset)
+  let x_raw = int.band(int.bshr(val, 38), 0x3FFFFFF)
+  let z_raw = int.band(int.bshr(val, 12), 0x3FFFFFF)
+  let y_raw = int.band(val, 0xFFF)
+  // Sign extend 26-bit and 12-bit values
+  let x = if x_raw >= 0x2000000 then x_raw - 0x4000000 else x_raw
+  let z = if z_raw >= 0x2000000 then z_raw - 0x4000000 else z_raw
+  let y = if y_raw >= 0x800 then y_raw - 0x1000 else y_raw
+  { x: x, y: y, z: z }
+}
+
+// --- Hex helpers ---
+
+local fn hex_to_int(c: String) -> Int = {
+  match c {
+    "0" => 0,  "1" => 1,  "2" => 2,  "3" => 3,
+    "4" => 4,  "5" => 5,  "6" => 6,  "7" => 7,
+    "8" => 8,  "9" => 9,  "a" => 10, "b" => 11,
+    "c" => 12, "d" => 13, "e" => 14, "f" => 15,
+    "A" => 10, "B" => 11, "C" => 12, "D" => 13,
+    "E" => 14, "F" => 15, _ => 0,
   }
-  val
+}
+
+local fn int_to_hex(v: Int) -> String = {
+  match v {
+    0 => "0",  1 => "1",  2 => "2",  3 => "3",
+    4 => "4",  5 => "5",  6 => "6",  7 => "7",
+    8 => "8",  9 => "9",  10 => "a", 11 => "b",
+    12 => "c", 13 => "d", 14 => "e", 15 => "f",
+    _ => "0",
+  }
 }
 
 // --- Tests ---
 
-test "encode_string roundtrip" {
+test "bool encode/decode" {
+  assert_eq(bytes.to_list(encode_bool(true)), [0x01])
+  assert_eq(bytes.to_list(encode_bool(false)), [0x00])
+  assert_eq(decode_bool(bytes.from_list([0x01]), 0), true)
+  assert_eq(decode_bool(bytes.from_list([0x00]), 0), false)
+}
+
+test "short encode/decode - positive" {
+  let buf = encode_short(256)
+  assert_eq(decode_short(buf, 0), 256)
+}
+
+test "short encode/decode - negative" {
+  let buf = encode_short(-1)
+  assert_eq(decode_short(buf, 0), -1)
+}
+
+test "unsigned_short encode/decode" {
+  let buf = encode_unsigned_short(25565)
+  assert_eq(decode_unsigned_short(buf, 0), 25565)
+  assert_eq(bytes.to_list(buf), [0x63, 0xDD])
+}
+
+test "int encode/decode roundtrip" {
+  assert_eq(decode_int(encode_int(305419896), 0), 305419896)
+  assert_eq(decode_int(encode_int(0), 0), 0)
+  assert_eq(decode_int(encode_int(-1), 0), -1)
+}
+
+test "long encode/decode roundtrip" {
+  assert_eq(decode_long(encode_long(0), 0), 0)
+  assert_eq(decode_long(encode_long(1), 0), 1)
+  assert_eq(decode_long(encode_long(1000000), 0), 1000000)
+}
+
+test "string encode/decode roundtrip" {
   let encoded = encode_string("hello")
   let decoded = decode_string(encoded, 0)
   assert_eq(decoded.value, "hello")
+  assert_eq(decoded.size, 6)
 }
 
-test "encode_unsigned_short 25565" {
-  assert_eq(bytes.to_list(encode_unsigned_short(25565)), [0x63, 0xDD])
+test "string encode/decode - empty" {
+  let encoded = encode_string("")
+  let decoded = decode_string(encoded, 0)
+  assert_eq(decoded.value, "")
+  assert_eq(decoded.size, 1)
 }
 
-test "encode_int / decode_int roundtrip" {
-  let buf = encode_int(305419896)
-  assert_eq(decode_int(buf, 0), 305419896)
+test "string encode/decode - unicode" {
+  let encoded = encode_string("日本語")
+  let decoded = decode_string(encoded, 0)
+  assert_eq(decoded.value, "日本語")
+}
+
+test "uuid encode/decode roundtrip" {
+  let hex = "951640b1d2b44919ba123499ee6bc156"
+  let encoded = encode_uuid(hex)
+  assert_eq(bytes.len(encoded), 16)
+  assert_eq(decode_uuid(encoded, 0), hex)
+}
+
+test "position encode/decode" {
+  let encoded = encode_position(10, 64, -20)
+  let decoded = decode_position(encoded, 0)
+  assert_eq(decoded.x, 10)
+  assert_eq(decoded.y, 64)
+  assert_eq(decoded.z, -20)
+}
+
+test "position encode/decode - origin" {
+  let encoded = encode_position(0, 0, 0)
+  let decoded = decode_position(encoded, 0)
+  assert_eq(decoded.x, 0)
+  assert_eq(decoded.y, 0)
+  assert_eq(decoded.z, 0)
 }

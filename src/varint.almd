@@ -34,6 +34,41 @@ fn decode(buf: Bytes, offset: Int) -> { value: Int, size: Int } = {
   { value: val, size: pos - offset }
 }
 
+// VarLong: 1-10 bytes, signed 64-bit.
+// Same encoding as VarInt but up to 10 bytes.
+
+fn encode_long(val: Int) -> Bytes = {
+  var v = val
+  var buf = bytes.new(0)
+  var done = false
+  while not done {
+    let byte = int.band(v, 0x7F)
+    v = int.bshr(v, 7)
+    if v != 0 and v != -1 then {
+      bytes.push(buf, int.bor(byte, 0x80))
+    } else {
+      bytes.push(buf, byte)
+      done = true
+    }
+  }
+  buf
+}
+
+fn decode_long(buf: Bytes, offset: Int) -> { value: Int, size: Int } = {
+  var val = 0
+  var shift = 0
+  var pos = offset
+  var done = false
+  while not done and pos < bytes.len(buf) and shift < 70 {
+    let b = bytes.read_u8(buf, pos)
+    val = int.bor(val, int.bshl(int.band(b, 0x7F), shift))
+    pos = pos + 1
+    if int.band(b, 0x80) == 0 then { done = true } else { () }
+    shift = shift + 7
+  }
+  { value: val, size: pos - offset }
+}
+
 // --- Tests ---
 
 test "encode 0" { assert_eq(bytes.to_list(encode(0)), [0x00]) }
