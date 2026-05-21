@@ -1,0 +1,115 @@
+import net
+import bytes
+import zlib
+import self.varint
+import self.packet
+import self.aes
+
+// Minecraft TCP connection with encryption and compression.
+
+type State = | Handshaking | Login | Configuration | Play
+
+type Connection = {
+  stream: TcpStream,
+  state: State,
+  compression_threshold: Int,
+  cipher_encrypt: Option[aes.Cfb8State],
+  cipher_decrypt: Option[aes.Cfb8State],
+  read_buf: Bytes,
+}
+
+effect fn connect(host: String, port: Int) -> Result[Connection, String] = {
+  let stream = net.tcp_connect(host, port)!
+  ok({
+    stream: stream,
+    state: Handshaking,
+    compression_threshold: -1,
+    cipher_encrypt: none,
+    cipher_decrypt: none,
+    read_buf: bytes.new(0),
+  })
+}
+
+effect fn send(conn: Connection, id: Int, data: Bytes) -> Result[Connection, String] = {
+  let raw = if conn.compression_threshold >= 0 then
+    packet.build_compressed(id, data, conn.compression_threshold)
+  else
+    packet.build(id, data)
+
+  match conn.cipher_encrypt {
+    some(cipher) => {
+      let result = aes.cfb8_encrypt(cipher, raw)
+      let new_conn = { ...conn, cipher_encrypt: some(result.state) }
+      net.tcp_write(new_conn.stream, result.data)!
+      ok(new_conn)
+    },
+    none => {
+      net.tcp_write(conn.stream, raw)!
+      ok(conn)
+    },
+  }
+}
+
+effect fn fill_buffer(conn: Connection, min_bytes: Int) -> Result[Connection, String] = {
+  var c = conn
+  while bytes.len(c.read_buf) < min_bytes {
+    let chunk = net.tcp_read(c.stream, 4096)!
+    guard bytes.len(chunk) > 0 else err("Connection closed")
+    let decrypted = match c.cipher_decrypt {
+      some(cipher) => {
+        let result = aes.cfb8_decrypt(cipher, chunk)
+        c = { ...c, cipher_decrypt: some(result.state) }
+        result.data
+      },
+      none => chunk,
+    }
+    c = { ...c, read_buf: bytes.concat(c.read_buf, decrypted) }
+  }
+  ok(c)
+}
+
+effect fn recv(conn: Connection) -> Result[{ conn: Connection, packet: packet.RawPacket }, String] = {
+  var c = fill_buffer(conn, 1)!
+
+  if c.compression_threshold >= 0 then {
+    let len_r = varint.decode(c.read_buf, 0)
+    let total_needed = len_r.size + len_r.value
+    c = fill_buffer(c, total_needed)!
+    let dl_r = varint.decode(c.read_buf, len_r.size)
+    let inner = if dl_r.value == 0 then
+      bytes.slice(c.read_buf, len_r.size + dl_r.size, total_needed)
+    else {
+      let compressed = bytes.slice(c.read_buf, len_r.size + dl_r.size, total_needed)
+      zlib.decompress(compressed) ?? compressed
+    }
+    let id_r = varint.decode(inner, 0)
+    let pkt: packet.RawPacket = { id: id_r.value, data: bytes.slice(inner, id_r.size, bytes.len(inner)) }
+    let remaining = bytes.slice(c.read_buf, total_needed, bytes.len(c.read_buf))
+    ok({ conn: { ...c, read_buf: remaining }, packet: pkt })
+  } else {
+    let len_r = varint.decode(c.read_buf, 0)
+    let total_needed = len_r.size + len_r.value
+    c = fill_buffer(c, total_needed)!
+    let id_r = varint.decode(c.read_buf, len_r.size)
+    let data_start = len_r.size + id_r.size
+    let data_len = len_r.value - id_r.size
+    let pkt: packet.RawPacket = { id: id_r.value, data: bytes.slice(c.read_buf, data_start, data_start + data_len) }
+    let remaining = bytes.slice(c.read_buf, total_needed, bytes.len(c.read_buf))
+    ok({ conn: { ...c, read_buf: remaining }, packet: pkt })
+  }
+}
+
+fn enable_compression(conn: Connection, threshold: Int) -> Connection =
+  { ...conn, compression_threshold: threshold }
+
+fn enable_encryption(conn: Connection, shared_secret: Bytes) -> Connection = {
+  let enc = aes.new_cfb8(shared_secret, shared_secret)
+  let dec = aes.new_cfb8(shared_secret, shared_secret)
+  { ...conn, cipher_encrypt: some(enc), cipher_decrypt: some(dec) }
+}
+
+fn set_state(conn: Connection, state: State) -> Connection =
+  { ...conn, state: state }
+
+fn close(conn: Connection) -> Unit =
+  net.tcp_close(conn.stream) ?? ()

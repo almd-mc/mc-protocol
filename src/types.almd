@@ -1,0 +1,65 @@
+import bytes
+import self.varint
+
+// Minecraft protocol data types.
+
+fn encode_string(s: String) -> Bytes = {
+  let str_bytes = bytes.from_string(s)
+  bytes.concat(varint.encode(bytes.len(str_bytes)), str_bytes)
+}
+
+fn decode_string(buf: Bytes, offset: Int) -> { value: String, size: Int } = {
+  let len_r = varint.decode(buf, offset)
+  let str_bytes = bytes.slice(buf, offset + len_r.size, offset + len_r.size + len_r.value)
+  { value: bytes.to_string(str_bytes) ?? "", size: len_r.size + len_r.value }
+}
+
+fn encode_unsigned_short(v: Int) -> Bytes =
+  bytes.from_list([int.band(int.bshr(v, 8), 0xFF), int.band(v, 0xFF)])
+
+fn encode_long(v: Int) -> Bytes = {
+  var buf = bytes.new(8)
+  for i in 0..8 {
+    buf = bytes.set(buf, 7 - i, int.band(int.bshr(v, i * 8), 0xFF))
+  }
+  buf
+}
+
+fn encode_int(v: Int) -> Bytes = {
+  var buf = bytes.new(4)
+  for i in 0..4 {
+    buf = bytes.set(buf, 3 - i, int.band(int.bshr(v, i * 8), 0xFF))
+  }
+  buf
+}
+
+fn decode_int(buf: Bytes, offset: Int) -> Int =
+  int.bor(
+    int.bor(int.bshl(bytes.read_u8(buf, offset), 24), int.bshl(bytes.read_u8(buf, offset + 1), 16)),
+    int.bor(int.bshl(bytes.read_u8(buf, offset + 2), 8), bytes.read_u8(buf, offset + 3))
+  )
+
+fn decode_long(buf: Bytes, offset: Int) -> Int = {
+  var val = 0
+  for i in 0..8 {
+    val = int.bor(int.bshl(val, 8), bytes.read_u8(buf, offset + i))
+  }
+  val
+}
+
+// --- Tests ---
+
+test "encode_string roundtrip" {
+  let encoded = encode_string("hello")
+  let decoded = decode_string(encoded, 0)
+  assert_eq(decoded.value, "hello")
+}
+
+test "encode_unsigned_short 25565" {
+  assert_eq(bytes.to_list(encode_unsigned_short(25565)), [0x63, 0xDD])
+}
+
+test "encode_int / decode_int roundtrip" {
+  let buf = encode_int(305419896)
+  assert_eq(decode_int(buf, 0), 305419896)
+}

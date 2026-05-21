@@ -1,0 +1,67 @@
+import bytes
+import zlib
+import self.varint
+
+// Minecraft packet framing.
+// Uncompressed: VarInt(length) + VarInt(packetId) + data
+// Compressed:   VarInt(packetLength) + VarInt(dataLength) + [zlib]data
+
+type RawPacket = {
+  id: Int,
+  data: Bytes,
+}
+
+fn build(id: Int, data: Bytes) -> Bytes = {
+  let inner = bytes.concat(varint.encode(id), data)
+  bytes.concat(varint.encode(bytes.len(inner)), inner)
+}
+
+effect fn build_compressed(id: Int, data: Bytes, threshold: Int) -> Bytes = {
+  let inner = bytes.concat(varint.encode(id), data)
+  let inner_len = bytes.len(inner)
+  if inner_len < threshold then {
+    let payload = bytes.concat(varint.encode(0), inner)
+    bytes.concat(varint.encode(bytes.len(payload)), payload)
+  } else {
+    let data_length = varint.encode(inner_len)
+    let compressed = zlib.compress(inner) ?? inner
+    let payload = bytes.concat(data_length, compressed)
+    bytes.concat(varint.encode(bytes.len(payload)), payload)
+  }
+}
+
+fn read(buf: Bytes, offset: Int) -> Option[{ packet: RawPacket, consumed: Int }] = {
+  let buf_len = bytes.len(buf)
+  if offset >= buf_len then none
+  else {
+    let len_r = varint.decode(buf, offset)
+    let total_start = offset + len_r.size
+    if total_start + len_r.value > buf_len then none
+    else {
+      let id_r = varint.decode(buf, total_start)
+      let data_start = total_start + id_r.size
+      let data_len = len_r.value - id_r.size
+      some({
+        packet: { id: id_r.value, data: bytes.slice(buf, data_start, data_start + data_len) },
+        consumed: total_start + len_r.value - offset,
+      })
+    }
+  }
+}
+
+// --- Tests ---
+
+test "build and read roundtrip" {
+  let pkt = build(0x00, bytes.from_string("hello"))
+  let result = read(pkt, 0) ?? { packet: { id: -1, data: bytes.new(0) }, consumed: 0 }
+  assert_eq(result.packet.id, 0x00)
+  assert_eq(bytes.to_string(result.packet.data) ?? "", "hello")
+}
+
+test "build_compressed below threshold" {
+  let pkt = build_compressed(0x02, bytes.from_list([0x01, 0x02]), 256)!
+  // Should have dataLength=0 (uncompressed)
+  let len_r = varint.decode(pkt, 0)
+  let dl_r = varint.decode(pkt, len_r.size)
+  assert_eq(dl_r.value, 0)
+}
