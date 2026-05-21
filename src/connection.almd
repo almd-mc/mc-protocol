@@ -32,7 +32,7 @@ effect fn connect(host: String, port: Int) -> Result[Connection, String] = {
 
 effect fn send(conn: Connection, id: Int, data: Bytes) -> Result[Connection, String] = {
   let raw = if conn.compression_threshold >= 0 then
-    packet.build_compressed(id, data, conn.compression_threshold)
+    packet.build_compressed(id, data, conn.compression_threshold)!
   else
     packet.build(id, data)
 
