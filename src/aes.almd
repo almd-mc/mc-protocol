@@ -3,7 +3,7 @@ import bytes
 // AES-128-CFB8 encryption.
 //
 // All mutation uses bytes.set_at (in-place) instead of bytes.set (clone).
-// This is critical for performance: CFB8 does 1 AES block per byte.
+// Read operations are separated from set_at to avoid Rust borrow conflicts.
 
 // --- S-Box ---
 
@@ -66,15 +66,24 @@ fn expand_key(key: Bytes) -> Bytes = {
       let s1 = bytes.read_u8(SBOX, t2)
       let s2 = bytes.read_u8(SBOX, t3)
       let s3 = bytes.read_u8(SBOX, t0)
-      bytes.set_at(w, i * 4,     int.bxor(bytes.read_u8(w, (i - 4) * 4), s0))
-      bytes.set_at(w, i * 4 + 1, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 1), s1))
-      bytes.set_at(w, i * 4 + 2, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 2), s2))
-      bytes.set_at(w, i * 4 + 3, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 3), s3))
+      // Read w[i-4] BEFORE set_at w[i] (borrow separation)
+      let w0 = int.bxor(bytes.read_u8(w, (i - 4) * 4), s0)
+      let w1 = int.bxor(bytes.read_u8(w, (i - 4) * 4 + 1), s1)
+      let w2 = int.bxor(bytes.read_u8(w, (i - 4) * 4 + 2), s2)
+      let w3 = int.bxor(bytes.read_u8(w, (i - 4) * 4 + 3), s3)
+      bytes.set_at(w, i * 4, w0)
+      bytes.set_at(w, i * 4 + 1, w1)
+      bytes.set_at(w, i * 4 + 2, w2)
+      bytes.set_at(w, i * 4 + 3, w3)
     } else {
-      bytes.set_at(w, i * 4,     int.bxor(bytes.read_u8(w, (i - 4) * 4), t0))
-      bytes.set_at(w, i * 4 + 1, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 1), t1))
-      bytes.set_at(w, i * 4 + 2, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 2), t2))
-      bytes.set_at(w, i * 4 + 3, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 3), t3))
+      let w0 = int.bxor(bytes.read_u8(w, (i - 4) * 4), t0)
+      let w1 = int.bxor(bytes.read_u8(w, (i - 4) * 4 + 1), t1)
+      let w2 = int.bxor(bytes.read_u8(w, (i - 4) * 4 + 2), t2)
+      let w3 = int.bxor(bytes.read_u8(w, (i - 4) * 4 + 3), t3)
+      bytes.set_at(w, i * 4, w0)
+      bytes.set_at(w, i * 4 + 1, w1)
+      bytes.set_at(w, i * 4 + 2, w2)
+      bytes.set_at(w, i * 4 + 3, w3)
     }
     i = i + 1
   }
@@ -85,7 +94,10 @@ fn expand_key(key: Bytes) -> Bytes = {
 
 local fn sub_bytes(state: Bytes) -> Bytes = {
   var s = bytes.slice(state, 0, 16)
-  for i in 0..16 { bytes.set_at(s, i, bytes.read_u8(SBOX, bytes.read_u8(s, i))) }
+  for i in 0..16 {
+    let v = bytes.read_u8(SBOX, bytes.read_u8(s, i))
+    bytes.set_at(s, i, v)
+  }
   s
 }
 
@@ -119,10 +131,14 @@ local fn mix_columns(state: Bytes) -> Bytes = {
     let s1 = bytes.read_u8(state, i + 1)
     let s2 = bytes.read_u8(state, i + 2)
     let s3 = bytes.read_u8(state, i + 3)
-    bytes.set_at(s, i,     int.band(int.bxor(int.bxor(gmul(2, s0), gmul(3, s1)), int.bxor(s2, s3)), 0xFF))
-    bytes.set_at(s, i + 1, int.band(int.bxor(int.bxor(s0, gmul(2, s1)), int.bxor(gmul(3, s2), s3)), 0xFF))
-    bytes.set_at(s, i + 2, int.band(int.bxor(int.bxor(s0, s1), int.bxor(gmul(2, s2), gmul(3, s3))), 0xFF))
-    bytes.set_at(s, i + 3, int.band(int.bxor(int.bxor(gmul(3, s0), s1), int.bxor(s2, gmul(2, s3))), 0xFF))
+    let r0 = int.band(int.bxor(int.bxor(gmul(2, s0), gmul(3, s1)), int.bxor(s2, s3)), 0xFF)
+    let r1 = int.band(int.bxor(int.bxor(s0, gmul(2, s1)), int.bxor(gmul(3, s2), s3)), 0xFF)
+    let r2 = int.band(int.bxor(int.bxor(s0, s1), int.bxor(gmul(2, s2), gmul(3, s3))), 0xFF)
+    let r3 = int.band(int.bxor(int.bxor(gmul(3, s0), s1), int.bxor(s2, gmul(2, s3))), 0xFF)
+    bytes.set_at(s, i, r0)
+    bytes.set_at(s, i + 1, r1)
+    bytes.set_at(s, i + 2, r2)
+    bytes.set_at(s, i + 3, r3)
     c = c + 1
   }
   s
@@ -131,7 +147,10 @@ local fn mix_columns(state: Bytes) -> Bytes = {
 local fn add_round_key(state: Bytes, ek: Bytes, round: Int) -> Bytes = {
   var s = bytes.slice(state, 0, 16)
   let off = round * 16
-  for i in 0..16 { bytes.set_at(s, i, int.bxor(bytes.read_u8(s, i), bytes.read_u8(ek, off + i))) }
+  for i in 0..16 {
+    let v = int.bxor(bytes.read_u8(s, i), bytes.read_u8(ek, off + i))
+    bytes.set_at(s, i, v)
+  }
   s
 }
 
@@ -168,7 +187,6 @@ fn cfb8_encrypt(state: Cfb8State, plaintext: Bytes) -> { data: Bytes, state: Cfb
     let encrypted = encrypt_block(iv, state.expanded_key)
     let cipher_byte = int.bxor(bytes.read_u8(plaintext, i), bytes.read_u8(encrypted, 0))
     bytes.set_at(out, i, cipher_byte)
-    // Shift IV left by 1, append cipher_byte
     bytes.copy_within(iv, 1, 16, 0)
     bytes.set_at(iv, 15, cipher_byte)
   }
@@ -182,8 +200,8 @@ fn cfb8_decrypt(state: Cfb8State, ciphertext: Bytes) -> { data: Bytes, state: Cf
   for i in 0..len {
     let encrypted = encrypt_block(iv, state.expanded_key)
     let cipher_byte = bytes.read_u8(ciphertext, i)
-    bytes.set_at(out, i, int.bxor(cipher_byte, bytes.read_u8(encrypted, 0)))
-    // Shift IV left by 1, append cipher_byte
+    let plain_byte = int.bxor(cipher_byte, bytes.read_u8(encrypted, 0))
+    bytes.set_at(out, i, plain_byte)
     bytes.copy_within(iv, 1, 16, 0)
     bytes.set_at(iv, 15, cipher_byte)
   }
