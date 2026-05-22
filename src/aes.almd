@@ -53,7 +53,7 @@ local fn gmul(a: Int, b: Int) -> Int = {
 
 fn expand_key(key: Bytes) -> Bytes = {
   var w = bytes.new(176)
-  for i in 0..16 { bytes.set_at(mut w, i, bytes.read_u8(key, i)) }
+  for i in 0..16 { bytes.set_at(w, i, bytes.read_u8(key, i)) }
   var i = 4
   while i < 44 {
     let t0 = bytes.read_u8(w, (i - 1) * 4)
@@ -66,15 +66,15 @@ fn expand_key(key: Bytes) -> Bytes = {
       let s1 = bytes.read_u8(SBOX, t2)
       let s2 = bytes.read_u8(SBOX, t3)
       let s3 = bytes.read_u8(SBOX, t0)
-      bytes.set_at(mut w, i * 4,     int.bxor(bytes.read_u8(w, (i - 4) * 4), s0))
-      bytes.set_at(mut w, i * 4 + 1, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 1), s1))
-      bytes.set_at(mut w, i * 4 + 2, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 2), s2))
-      bytes.set_at(mut w, i * 4 + 3, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 3), s3))
+      bytes.set_at(w, i * 4,     int.bxor(bytes.read_u8(w, (i - 4) * 4), s0))
+      bytes.set_at(w, i * 4 + 1, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 1), s1))
+      bytes.set_at(w, i * 4 + 2, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 2), s2))
+      bytes.set_at(w, i * 4 + 3, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 3), s3))
     } else {
-      bytes.set_at(mut w, i * 4,     int.bxor(bytes.read_u8(w, (i - 4) * 4), t0))
-      bytes.set_at(mut w, i * 4 + 1, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 1), t1))
-      bytes.set_at(mut w, i * 4 + 2, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 2), t2))
-      bytes.set_at(mut w, i * 4 + 3, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 3), t3))
+      bytes.set_at(w, i * 4,     int.bxor(bytes.read_u8(w, (i - 4) * 4), t0))
+      bytes.set_at(w, i * 4 + 1, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 1), t1))
+      bytes.set_at(w, i * 4 + 2, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 2), t2))
+      bytes.set_at(w, i * 4 + 3, int.bxor(bytes.read_u8(w, (i - 4) * 4 + 3), t3))
     }
     i = i + 1
   }
@@ -85,28 +85,28 @@ fn expand_key(key: Bytes) -> Bytes = {
 
 local fn sub_bytes(state: Bytes) -> Bytes = {
   var s = bytes.slice(state, 0, 16)
-  for i in 0..16 { bytes.set_at(mut s, i, bytes.read_u8(SBOX, bytes.read_u8(s, i))) }
+  for i in 0..16 { bytes.set_at(s, i, bytes.read_u8(SBOX, bytes.read_u8(s, i))) }
   s
 }
 
 local fn shift_rows(state: Bytes) -> Bytes = {
   var s = bytes.slice(state, 0, 16)
   let t = bytes.read_u8(state, 1)
-  bytes.set_at(mut s, 1, bytes.read_u8(state, 5))
-  bytes.set_at(mut s, 5, bytes.read_u8(state, 9))
-  bytes.set_at(mut s, 9, bytes.read_u8(state, 13))
-  bytes.set_at(mut s, 13, t)
+  bytes.set_at(s, 1, bytes.read_u8(state, 5))
+  bytes.set_at(s, 5, bytes.read_u8(state, 9))
+  bytes.set_at(s, 9, bytes.read_u8(state, 13))
+  bytes.set_at(s, 13, t)
   let t0 = bytes.read_u8(state, 2)
   let t1 = bytes.read_u8(state, 6)
-  bytes.set_at(mut s, 2, bytes.read_u8(state, 10))
-  bytes.set_at(mut s, 6, bytes.read_u8(state, 14))
-  bytes.set_at(mut s, 10, t0)
-  bytes.set_at(mut s, 14, t1)
+  bytes.set_at(s, 2, bytes.read_u8(state, 10))
+  bytes.set_at(s, 6, bytes.read_u8(state, 14))
+  bytes.set_at(s, 10, t0)
+  bytes.set_at(s, 14, t1)
   let t2 = bytes.read_u8(state, 15)
-  bytes.set_at(mut s, 15, bytes.read_u8(state, 11))
-  bytes.set_at(mut s, 11, bytes.read_u8(state, 7))
-  bytes.set_at(mut s, 7, bytes.read_u8(state, 3))
-  bytes.set_at(mut s, 3, t2)
+  bytes.set_at(s, 15, bytes.read_u8(state, 11))
+  bytes.set_at(s, 11, bytes.read_u8(state, 7))
+  bytes.set_at(s, 7, bytes.read_u8(state, 3))
+  bytes.set_at(s, 3, t2)
   s
 }
 
@@ -119,10 +119,10 @@ local fn mix_columns(state: Bytes) -> Bytes = {
     let s1 = bytes.read_u8(state, i + 1)
     let s2 = bytes.read_u8(state, i + 2)
     let s3 = bytes.read_u8(state, i + 3)
-    bytes.set_at(mut s, i,     int.band(int.bxor(int.bxor(gmul(2, s0), gmul(3, s1)), int.bxor(s2, s3)), 0xFF))
-    bytes.set_at(mut s, i + 1, int.band(int.bxor(int.bxor(s0, gmul(2, s1)), int.bxor(gmul(3, s2), s3)), 0xFF))
-    bytes.set_at(mut s, i + 2, int.band(int.bxor(int.bxor(s0, s1), int.bxor(gmul(2, s2), gmul(3, s3))), 0xFF))
-    bytes.set_at(mut s, i + 3, int.band(int.bxor(int.bxor(gmul(3, s0), s1), int.bxor(s2, gmul(2, s3))), 0xFF))
+    bytes.set_at(s, i,     int.band(int.bxor(int.bxor(gmul(2, s0), gmul(3, s1)), int.bxor(s2, s3)), 0xFF))
+    bytes.set_at(s, i + 1, int.band(int.bxor(int.bxor(s0, gmul(2, s1)), int.bxor(gmul(3, s2), s3)), 0xFF))
+    bytes.set_at(s, i + 2, int.band(int.bxor(int.bxor(s0, s1), int.bxor(gmul(2, s2), gmul(3, s3))), 0xFF))
+    bytes.set_at(s, i + 3, int.band(int.bxor(int.bxor(gmul(3, s0), s1), int.bxor(s2, gmul(2, s3))), 0xFF))
     c = c + 1
   }
   s
@@ -131,7 +131,7 @@ local fn mix_columns(state: Bytes) -> Bytes = {
 local fn add_round_key(state: Bytes, ek: Bytes, round: Int) -> Bytes = {
   var s = bytes.slice(state, 0, 16)
   let off = round * 16
-  for i in 0..16 { bytes.set_at(mut s, i, int.bxor(bytes.read_u8(s, i), bytes.read_u8(ek, off + i))) }
+  for i in 0..16 { bytes.set_at(s, i, int.bxor(bytes.read_u8(s, i), bytes.read_u8(ek, off + i))) }
   s
 }
 
@@ -167,10 +167,10 @@ fn cfb8_encrypt(state: Cfb8State, plaintext: Bytes) -> { data: Bytes, state: Cfb
   for i in 0..len {
     let encrypted = encrypt_block(iv, state.expanded_key)
     let cipher_byte = int.bxor(bytes.read_u8(plaintext, i), bytes.read_u8(encrypted, 0))
-    bytes.set_at(mut out, i, cipher_byte)
+    bytes.set_at(out, i, cipher_byte)
     // Shift IV left by 1, append cipher_byte
-    bytes.copy_within(mut iv, 1, 16, 0)
-    bytes.set_at(mut iv, 15, cipher_byte)
+    bytes.copy_within(iv, 1, 16, 0)
+    bytes.set_at(iv, 15, cipher_byte)
   }
   { data: out, state: { expanded_key: state.expanded_key, iv: iv } }
 }
@@ -182,10 +182,10 @@ fn cfb8_decrypt(state: Cfb8State, ciphertext: Bytes) -> { data: Bytes, state: Cf
   for i in 0..len {
     let encrypted = encrypt_block(iv, state.expanded_key)
     let cipher_byte = bytes.read_u8(ciphertext, i)
-    bytes.set_at(mut out, i, int.bxor(cipher_byte, bytes.read_u8(encrypted, 0)))
+    bytes.set_at(out, i, int.bxor(cipher_byte, bytes.read_u8(encrypted, 0)))
     // Shift IV left by 1, append cipher_byte
-    bytes.copy_within(mut iv, 1, 16, 0)
-    bytes.set_at(mut iv, 15, cipher_byte)
+    bytes.copy_within(iv, 1, 16, 0)
+    bytes.set_at(iv, 15, cipher_byte)
   }
   { data: out, state: { expanded_key: state.expanded_key, iv: iv } }
 }
