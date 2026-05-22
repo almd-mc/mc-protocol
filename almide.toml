@@ -1,3 +1,6 @@
 [package]
 name = "mc_protocol"
 version = "0.1.0"
+
+[dependencies]
+aes = { git = "https://github.com/almide/aes" }

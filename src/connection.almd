@@ -1,9 +1,9 @@
 import net
 import bytes
 import zlib
+import aes
 import self.varint
 import self.packet
-import self.aes
 
 // Minecraft TCP connection with encryption and compression.
 
