@@ -38,7 +38,9 @@ effect fn send(conn: Connection, id: Int, data: Bytes) -> Result[Connection, Str
 
   match conn.cipher_encrypt {
     some(cipher) => {
+      println("[send] id=0x${string.pad_start(int.to_hex(id), 2, "0")} raw_len=${int.to_string(bytes.len(raw))} iv_head=${int.to_string(bytes.read_u8(cipher.iv, 0))}")
       let result = aes.cfb8_encrypt(cipher, raw)
+      println("[send] enc_len=${int.to_string(bytes.len(result.data))} new_iv_head=${int.to_string(bytes.read_u8(result.state.iv, 0))}")
       let new_conn = { ...conn, cipher_encrypt: some(result.state) }
       net.tcp_write(new_conn.stream, result.data)!
       ok(new_conn)
@@ -58,6 +60,7 @@ effect fn fill_buffer(conn: Connection, min_bytes: Int) -> Result[Connection, St
     let decrypted = match c.cipher_decrypt {
       some(cipher) => {
         let result = aes.cfb8_decrypt(cipher, chunk)
+        println("[recv] chunk_len=${int.to_string(bytes.len(chunk))} dec_iv_head=${int.to_string(bytes.read_u8(result.state.iv, 0))}")
         c = { ...c, cipher_decrypt: some(result.state) }
         result.data
       },
