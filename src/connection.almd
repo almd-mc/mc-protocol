@@ -26,7 +26,7 @@ effect fn connect(host: String, port: Int) -> Result[Connection, String] = {
     compression_threshold: -1,
     cipher_encrypt: none,
     cipher_decrypt: none,
-    read_buf: bytes.new(0),
+    read_buf: bytes.zeros(0),
   })
 }
 
@@ -40,11 +40,11 @@ effect fn send(conn: Connection, id: Int, data: Bytes) -> Result[Connection, Str
     some(cipher) => {
       let result = aes.cfb8_encrypt(cipher, raw)
       let new_conn = { ...conn, cipher_encrypt: some(result.state) }
-      net.tcp_write(new_conn.stream, result.data)!
+      io.write(new_conn.stream, result.data)!
       ok(new_conn)
     },
     none => {
-      net.tcp_write(conn.stream, raw)!
+      io.write(conn.stream, raw)!
       ok(conn)
     },
   }
@@ -53,7 +53,7 @@ effect fn send(conn: Connection, id: Int, data: Bytes) -> Result[Connection, Str
 effect fn fill_buffer(conn: Connection, min_bytes: Int) -> Result[Connection, String] = {
   var c = conn
   while bytes.len(c.read_buf) < min_bytes {
-    let chunk = net.tcp_read(c.stream, 4096)!
+    let chunk = io.read(c.stream, 4096)!
     guard bytes.len(chunk) > 0 else err("Connection closed")
     let decrypted = match c.cipher_decrypt {
       some(cipher) => {
@@ -63,7 +63,7 @@ effect fn fill_buffer(conn: Connection, min_bytes: Int) -> Result[Connection, St
       },
       none => chunk,
     }
-    c = { ...c, read_buf: bytes.concat(c.read_buf, decrypted) }
+    c = { ...c, read_buf: (c.read_buf + decrypted) }
   }
   ok(c)
 }
@@ -112,4 +112,4 @@ fn set_state(conn: Connection, state: State) -> Connection =
   { ...conn, state: state }
 
 fn close(conn: Connection) -> Unit =
-  net.tcp_close(conn.stream) ?? ()
+  io.close(conn.stream) ?? ()

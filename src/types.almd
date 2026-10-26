@@ -11,7 +11,7 @@ fn encode_bool(v: Bool) -> Bytes =
   bytes.from_list([if v then 0x01 else 0x00])
 
 fn decode_bool(buf: Bytes, offset: Int) -> Bool =
-  bytes.read_u8(buf, offset) != 0
+  (bytes.get(buf, offset) ?? 0) != 0
 
 // --- Byte ---
 
@@ -19,7 +19,7 @@ fn encode_byte(v: Int) -> Bytes =
   bytes.from_list([int.band(v, 0xFF)])
 
 fn decode_byte(buf: Bytes, offset: Int) -> Int =
-  bytes.read_u8(buf, offset)
+  bytes.get(buf, offset) ?? 0
 
 // --- Short (signed 16-bit, big-endian) ---
 
@@ -27,7 +27,7 @@ fn encode_short(v: Int) -> Bytes =
   bytes.from_list([int.band(int.bshr(v, 8), 0xFF), int.band(v, 0xFF)])
 
 fn decode_short(buf: Bytes, offset: Int) -> Int = {
-  let raw = int.bor(int.bshl(bytes.read_u8(buf, offset), 8), bytes.read_u8(buf, offset + 1))
+  let raw = int.bor(int.bshl(bytes.get(buf, offset) ?? 0, 8), bytes.get(buf, offset + 1) ?? 0)
   if raw >= 32768 then raw - 65536 else raw
 }
 
@@ -37,12 +37,12 @@ fn encode_unsigned_short(v: Int) -> Bytes =
   bytes.from_list([int.band(int.bshr(v, 8), 0xFF), int.band(v, 0xFF)])
 
 fn decode_unsigned_short(buf: Bytes, offset: Int) -> Int =
-  int.bor(int.bshl(bytes.read_u8(buf, offset), 8), bytes.read_u8(buf, offset + 1))
+  int.bor(int.bshl(bytes.get(buf, offset) ?? 0, 8), bytes.get(buf, offset + 1) ?? 0)
 
 // --- Int (signed 32-bit, big-endian) ---
 
 fn encode_int(v: Int) -> Bytes = {
-  var buf = bytes.new(4)
+  var buf = bytes.zeros(4)
   for i in 0..4 {
     buf = bytes.set(buf, 3 - i, int.band(int.bshr(v, i * 8), 0xFF))
   }
@@ -51,8 +51,8 @@ fn encode_int(v: Int) -> Bytes = {
 
 fn decode_int(buf: Bytes, offset: Int) -> Int = {
   let raw = int.bor(
-    int.bor(int.bshl(bytes.read_u8(buf, offset), 24), int.bshl(bytes.read_u8(buf, offset + 1), 16)),
-    int.bor(int.bshl(bytes.read_u8(buf, offset + 2), 8), bytes.read_u8(buf, offset + 3))
+    int.bor(int.bshl(bytes.get(buf, offset) ?? 0, 24), int.bshl(bytes.get(buf, offset + 1) ?? 0, 16)),
+    int.bor(int.bshl(bytes.get(buf, offset + 2) ?? 0, 8), bytes.get(buf, offset + 3) ?? 0)
   )
   // Sign extend from 32 bits
   if int.band(raw, 0x80000000) != 0 then int.bor(raw, -4294967296) else raw
@@ -61,7 +61,7 @@ fn decode_int(buf: Bytes, offset: Int) -> Int = {
 // --- Long (signed 64-bit, big-endian) ---
 
 fn encode_long(v: Int) -> Bytes = {
-  var buf = bytes.new(8)
+  var buf = bytes.zeros(8)
   for i in 0..8 {
     buf = bytes.set(buf, 7 - i, int.band(int.bshr(v, i * 8), 0xFF))
   }
@@ -71,7 +71,7 @@ fn encode_long(v: Int) -> Bytes = {
 fn decode_long(buf: Bytes, offset: Int) -> Int = {
   var val = 0
   for i in 0..8 {
-    val = int.bor(int.bshl(val, 8), bytes.read_u8(buf, offset + i))
+    val = int.bor(int.bshl(val, 8), bytes.get(buf, offset + i) ?? 0)
   }
   val
 }
@@ -79,31 +79,31 @@ fn decode_long(buf: Bytes, offset: Int) -> Int = {
 // --- Float (32-bit IEEE 754, big-endian) ---
 
 fn encode_float(v: Float) -> Bytes = {
-  var buf = bytes.new(4)
-  bytes.set_f32_be(buf, 0, v)
+  var buf = bytes.zeros(4)
+  bytes.put_f32_be(buf, 0, v)
   buf
 }
 
 fn decode_float(buf: Bytes, offset: Int) -> Float =
-  bytes.read_f32_be(buf, offset)
+  bytes.get_f32_be(buf, offset) ?? 0.0
 
 // --- Double (64-bit IEEE 754, big-endian) ---
 
 fn encode_double(v: Float) -> Bytes = {
-  var buf = bytes.new(8)
-  bytes.set_f64_be(buf, 0, v)
+  var buf = bytes.zeros(8)
+  bytes.put_f64_be(buf, 0, v)
   buf
 }
 
 fn decode_double(buf: Bytes, offset: Int) -> Float =
-  bytes.read_f64_be(buf, offset)
+  bytes.get_f64_be(buf, offset) ?? 0.0
 
 // --- String (VarInt length + UTF-8) ---
 // Max length: 32767 bytes (encoded), max chars depends on context.
 
 fn encode_string(s: String) -> Bytes = {
   let str_bytes = bytes.from_string(s)
-  bytes.concat(varint.encode(bytes.len(str_bytes)), str_bytes)
+  varint.encode(bytes.len(str_bytes)) + str_bytes
 }
 
 fn decode_string(buf: Bytes, offset: Int) -> { value: String, size: Int } = {
@@ -123,8 +123,8 @@ fn decode_identifier(buf: Bytes, offset: Int) -> { value: String, size: Int } =
 
 fn encode_uuid(uuid_hex: String) -> Bytes = {
   // 32 hex chars (no dashes) → 16 bytes
-  let chars = string.chars(uuid_hex)
-  var buf = bytes.new(16)
+  let chars = string.to_list(uuid_hex)
+  var buf = bytes.zeros(16)
   for i in 0..16 {
     let hi = hex_to_int(list.get(chars, i * 2) ?? "0")
     let lo = hex_to_int(list.get(chars, i * 2 + 1) ?? "0")
@@ -136,7 +136,7 @@ fn encode_uuid(uuid_hex: String) -> Bytes = {
 fn decode_uuid(buf: Bytes, offset: Int) -> String = {
   var hex = ""
   for i in 0..16 {
-    let b = bytes.read_u8(buf, offset + i)
+    let b = bytes.get(buf, offset + i) ?? 0
     let hi = int_to_hex(int.bshr(b, 4))
     let lo = int_to_hex(int.band(b, 0x0F))
     hex = "${hex}${hi}${lo}"
