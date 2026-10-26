@@ -43,7 +43,7 @@ fn decode_unsigned_short(buf: Bytes, offset: Int) -> Int =
 
 fn encode_int(v: Int) -> Bytes = {
   var buf = bytes.zeros(4)
-  for i in 0..4 {
+  for i in 0..<4 {
     buf = bytes.set(buf, 3 - i, int.band(int.bshr(v, i * 8), 0xFF))
   }
   buf
@@ -62,7 +62,7 @@ fn decode_int(buf: Bytes, offset: Int) -> Int = {
 
 fn encode_long(v: Int) -> Bytes = {
   var buf = bytes.zeros(8)
-  for i in 0..8 {
+  for i in 0..<8 {
     buf = bytes.set(buf, 7 - i, int.band(int.bshr(v, i * 8), 0xFF))
   }
   buf
@@ -70,7 +70,7 @@ fn encode_long(v: Int) -> Bytes = {
 
 fn decode_long(buf: Bytes, offset: Int) -> Int = {
   var val = 0
-  for i in 0..8 {
+  for i in 0..<8 {
     val = int.bor(int.bshl(val, 8), bytes.get(buf, offset + i) ?? 0)
   }
   val
@@ -125,7 +125,7 @@ fn encode_uuid(uuid_hex: String) -> Bytes = {
   // 32 hex chars (no dashes) → 16 bytes
   let chars = string.to_list(uuid_hex)
   var buf = bytes.zeros(16)
-  for i in 0..16 {
+  for i in 0..<16 {
     let hi = hex_to_int(list.get(chars, i * 2) ?? "0")
     let lo = hex_to_int(list.get(chars, i * 2 + 1) ?? "0")
     buf = bytes.set(buf, i, hi * 16 + lo)
@@ -135,7 +135,7 @@ fn encode_uuid(uuid_hex: String) -> Bytes = {
 
 fn decode_uuid(buf: Bytes, offset: Int) -> String = {
   var hex = ""
-  for i in 0..16 {
+  for i in 0..<16 {
     let b = bytes.get(buf, offset + i) ?? 0
     let hi = int_to_hex(int.bshr(b, 4))
     let lo = int_to_hex(int.band(b, 0x0F))
