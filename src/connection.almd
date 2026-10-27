@@ -1,4 +1,5 @@
 import net
+import io
 import bytes
 import zlib
 import aes
@@ -111,5 +112,5 @@ fn enable_encryption(conn: Connection, shared_secret: Bytes) -> Connection = {
 fn set_state(conn: Connection, state: State) -> Connection =
   { ...conn, state: state }
 
-fn close(conn: Connection) -> Unit =
+effect fn close(conn: Connection) -> Unit =
   io.close(conn.stream) ?? ()
