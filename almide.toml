@@ -2,5 +2,10 @@
 name = "mc_protocol"
 version = "0.2.0"
 
+[permissions]
+# Dialect epoch 15 (#4093): a dependency that brings native code is built only when
+# the root manifest grants it by name.
+native = ["aes"]
+
 [dependencies]
 aes = { git = "https://github.com/almide/aes" }
