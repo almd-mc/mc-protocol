@@ -1,0 +1,3 @@
+# almide.lock — auto-generated, do not edit
+
+aes = { git = "https://github.com/almide/aes", ref = "main", commit = "31482076dcbb182bd5189b441ca02804fe8fb1b0" }

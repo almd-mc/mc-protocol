@@ -4,7 +4,7 @@ import bytes
 
 fn encode(val: Int) -> Bytes = {
   var v = int.band(val, 0xFFFFFFFF)
-  var buf = bytes.new(0)
+  var buf = bytes.zeros(0)
   var done = false
   while not done {
     let byte = int.band(v, 0x7F)
@@ -25,7 +25,7 @@ fn decode(buf: Bytes, offset: Int) -> { value: Int, size: Int } = {
   var pos = offset
   var done = false
   while not done and pos < bytes.len(buf) {
-    let b = bytes.read_u8(buf, pos)
+    let b = bytes.get(buf, pos) ?? 0
     val = int.bor(val, int.bshl(int.band(b, 0x7F), shift))
     pos = pos + 1
     if int.band(b, 0x80) == 0 then { done = true } else { () }
@@ -39,7 +39,7 @@ fn decode(buf: Bytes, offset: Int) -> { value: Int, size: Int } = {
 
 fn encode_long(val: Int) -> Bytes = {
   var v = val
-  var buf = bytes.new(0)
+  var buf = bytes.zeros(0)
   var done = false
   while not done {
     let byte = int.band(v, 0x7F)
@@ -60,7 +60,7 @@ fn decode_long(buf: Bytes, offset: Int) -> { value: Int, size: Int } = {
   var pos = offset
   var done = false
   while not done and pos < bytes.len(buf) and shift < 70 {
-    let b = bytes.read_u8(buf, pos)
+    let b = bytes.get(buf, pos) ?? 0
     val = int.bor(val, int.bshl(int.band(b, 0x7F), shift))
     pos = pos + 1
     if int.band(b, 0x80) == 0 then { done = true } else { () }

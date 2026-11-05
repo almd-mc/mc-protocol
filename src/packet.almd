@@ -12,21 +12,21 @@ type RawPacket = {
 }
 
 fn build(id: Int, data: Bytes) -> Bytes = {
-  let inner = bytes.concat(varint.encode(id), data)
-  bytes.concat(varint.encode(bytes.len(inner)), inner)
+  let inner = varint.encode(id) + data
+  varint.encode(bytes.len(inner)) + inner
 }
 
 effect fn build_compressed(id: Int, data: Bytes, threshold: Int) -> Bytes = {
-  let inner = bytes.concat(varint.encode(id), data)
+  let inner = varint.encode(id) + data
   let inner_len = bytes.len(inner)
   if inner_len < threshold then {
-    let payload = bytes.concat(varint.encode(0), inner)
-    bytes.concat(varint.encode(bytes.len(payload)), payload)
+    let payload = varint.encode(0) + inner
+    varint.encode(bytes.len(payload)) + payload
   } else {
     let data_length = varint.encode(inner_len)
     let compressed = zlib.compress(inner) ?? inner
-    let payload = bytes.concat(data_length, compressed)
-    bytes.concat(varint.encode(bytes.len(payload)), payload)
+    let payload = data_length + compressed
+    varint.encode(bytes.len(payload)) + payload
   }
 }
 
@@ -53,7 +53,7 @@ fn read(buf: Bytes, offset: Int) -> Option[{ packet: RawPacket, consumed: Int }]
 
 test "build and read roundtrip" {
   let pkt = build(0x00, bytes.from_string("hello"))
-  let result = read(pkt, 0) ?? { packet: { id: -1, data: bytes.new(0) }, consumed: 0 }
+  let result = read(pkt, 0) ?? { packet: { id: -1, data: bytes.zeros(0) }, consumed: 0 }
   assert_eq(result.packet.id, 0x00)
   assert_eq(bytes.to_string(result.packet.data) ?? "", "hello")
 }
